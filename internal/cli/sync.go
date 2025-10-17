@@ -212,7 +212,7 @@ func findUnmanagedFiles(repoDir string, idx *types.Index) ([]string, error) {
 			return err
 		}
 
-		// Skip .git directory and index.json
+		// Skip .git directory, index.json and repo metadata like .dotman/ and README.md
 		if strings.Contains(path, ".git") || strings.HasSuffix(path, "index.json") {
 			if info.IsDir() && strings.HasSuffix(path, ".git") {
 				return filepath.SkipDir
@@ -229,6 +229,11 @@ func findUnmanagedFiles(repoDir string, idx *types.Index) ([]string, error) {
 		relPath, err := filepath.Rel(repoDir, path)
 		if err != nil {
 			return err
+		}
+
+		// Skip repository metadata files like .dotman and README.md
+		if config.ShouldIgnoreRepoPath(cfg, relPath) {
+			return nil
 		}
 
 		// Check if this file is already managed in the index

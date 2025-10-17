@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Merith-TK/dotman/pkg/types"
 )
 
 const (
-	DotmanDirName = ".dotman"
-	IndexFileName = "index.json"
+	DotmanDirName  = ".dotman"
+	IndexFileName  = "index.json"
 	DefaultVersion = "1.0"
 )
 
@@ -52,7 +53,7 @@ func IndexFileExists(cfg *types.Config) bool {
 // Only allows paths within the home directory for security
 func ExpandPath(cfg *types.Config, path string) (string, error) {
 	var expandedPath string
-	
+
 	if path == "~" {
 		expandedPath = cfg.HomeDir
 	} else if filepath.HasPrefix(path, "~/") {
@@ -65,12 +66,12 @@ func ExpandPath(cfg *types.Config, path string) (string, error) {
 		}
 		expandedPath = absPath
 	}
-	
+
 	// Security check: ensure path is within home directory
 	if !IsInsideHome(cfg, expandedPath) {
 		return "", fmt.Errorf("path must be inside home directory: %s", expandedPath)
 	}
-	
+
 	return expandedPath, nil
 }
 
@@ -80,7 +81,7 @@ func RelativeToHome(cfg *types.Config, absolutePath string) (string, error) {
 	if !IsInsideHome(cfg, absolutePath) {
 		return "", fmt.Errorf("path is outside home directory: %s", absolutePath)
 	}
-	
+
 	return filepath.Rel(cfg.HomeDir, absolutePath)
 }
 
@@ -90,18 +91,44 @@ func IsInsideHome(cfg *types.Config, path string) bool {
 	if err != nil {
 		return false
 	}
-	
+
 	// Ensure home directory is absolute
 	absHome, err := filepath.Abs(cfg.HomeDir)
 	if err != nil {
 		return false
 	}
-	
+
 	rel, err := filepath.Rel(absHome, absPath)
 	if err != nil {
 		return false
 	}
-	
+
 	// If the relative path starts with "..", it's outside the home directory
 	return !filepath.HasPrefix(rel, "..")
+}
+
+// ShouldIgnoreRepoPath returns true if the given repo-relative path refers to
+// metadata that should never be tracked or deployed by dotman.
+// We hardcode ignoring the .dotman directory and README.md (case-insensitive).
+func ShouldIgnoreRepoPath(cfg *types.Config, repoRelPath string) bool {
+	// Normalize path separators
+	rel := filepath.Clean(repoRelPath)
+
+	// Ignore dotman metadata directory at repo root
+	if rel == ".dotman" || rel == ".dotman"+string(filepath.Separator) {
+		return true
+	}
+
+	// Ignore README.md (case-insensitive) at repo root
+	lower := strings.ToLower(rel)
+	if lower == "readme.md" {
+		return true
+	}
+
+	// If the path is inside a .dotman directory, ignore it
+	if strings.HasPrefix(rel, ".dotman"+string(filepath.Separator)) {
+		return true
+	}
+
+	return false
 }

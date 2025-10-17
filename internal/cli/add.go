@@ -73,6 +73,11 @@ func runAdd(path string) error {
 		return fmt.Errorf("failed to get relative path: %w", err)
 	}
 
+	// Prevent tracking repository metadata like .dotman and README.md
+	if config.ShouldIgnoreRepoPath(cfg, relativePath) {
+		return fmt.Errorf("refusing to track repository metadata: %s", relativePath)
+	}
+
 	repoPath := filepath.Join(cfg.DotmanDir, relativePath)
 
 	// Get file type

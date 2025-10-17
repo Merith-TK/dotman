@@ -41,6 +41,12 @@ func runDeploy() error {
 	for _, file := range index.GetAllFiles(idx) {
 		repoPath := filepath.Join(cfg.DotmanDir, file.RepoPath)
 
+		// Skip repository metadata
+		if config.ShouldIgnoreRepoPath(cfg, file.RepoPath) {
+			fmt.Printf("Skipping repository metadata: %s\n", file.RepoPath)
+			continue
+		}
+
 		// Check if repo file exists
 		if !fileops.PathExists(repoPath) {
 			fmt.Printf("Warning: repo file missing for %s\n", file.OriginalPath)
