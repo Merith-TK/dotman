@@ -50,6 +50,7 @@ func init() {
 	rootCmd.AddCommand(removeCmd)
 	rootCmd.AddCommand(deployCmd)
 	rootCmd.AddCommand(syncCmd)
+	rootCmd.AddCommand(remoteCmd)
 
 	// Add flags
 	addCmd.Flags().BoolP("force", "f", false, "Force operation even if conflicts exist")
