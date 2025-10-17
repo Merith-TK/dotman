@@ -108,15 +108,66 @@ func runStatus(fix bool, cleanup bool, dryRun bool) error {
 		fmt.Println("\nAll symlinks are working correctly.")
 	}
 
-	// Show git status if repository exists
+	// Show git repository information if repository exists
 	if git.IsGitRepo(cfg.DotmanDir) {
+		fmt.Println("\nGit Repository Information:")
+
+		// Show current branch
+		if branch, err := git.GetCurrentBranch(cfg.DotmanDir); err == nil {
+			fmt.Printf("Branch: %s\n", branch)
+		} else {
+			fmt.Printf("Branch: <unknown> (%v)\n", err)
+		}
+
+		// Show remote URL
+		if remoteURL, err := git.GetRemoteURL(cfg.DotmanDir); err == nil {
+			fmt.Printf("Remote: %s\n", remoteURL)
+		} else {
+			fmt.Printf("Remote: <not configured>\n")
+		}
+
+		// Show commit count
+		if commitCount, err := git.GetCommitCount(cfg.DotmanDir); err == nil {
+			fmt.Printf("Commits: %s\n", commitCount)
+		}
+
+		// Show uncommitted changes
 		hasChanges, err := git.HasChanges(cfg.DotmanDir)
-		if err == nil && hasChanges {
-			fmt.Println("\nUncommitted changes in repository:")
-			if gitStatus, err := git.Status(cfg.DotmanDir); err == nil {
-				fmt.Print(gitStatus)
+		if err == nil {
+			if hasChanges {
+				fmt.Println("Status: Uncommitted changes")
+				if gitStatus, err := git.Status(cfg.DotmanDir); err == nil {
+					// Parse and format git status output
+					lines := strings.Split(strings.TrimSpace(gitStatus), "\n")
+					for _, line := range lines {
+						if len(line) >= 3 {
+							status := line[:2]
+							file := line[3:]
+							switch status {
+							case "??":
+								fmt.Printf("  + %s (untracked)\n", file)
+							case " M":
+								fmt.Printf("  ~ %s (modified)\n", file)
+							case "M ":
+								fmt.Printf("  ~ %s (staged)\n", file)
+							case " D":
+								fmt.Printf("  - %s (deleted)\n", file)
+							case "D ":
+								fmt.Printf("  - %s (staged for deletion)\n", file)
+							case "A ":
+								fmt.Printf("  + %s (added)\n", file)
+							default:
+								fmt.Printf("  %s %s\n", status, file)
+							}
+						}
+					}
+				}
+			} else {
+				fmt.Println("Status: Clean (no changes)")
 			}
 		}
+	} else {
+		fmt.Println("\nGit Repository: Not initialized")
 	}
 
 	return nil

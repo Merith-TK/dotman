@@ -5,11 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // InitRepo initializes a git repository in the specified directory
 func InitRepo(repoPath string) error {
-	cmd := exec.Command("git", "init")
+	cmd := exec.Command("git", "init", "-b", "main")
 	cmd.Dir = repoPath
 
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -124,10 +125,82 @@ func Push(repoPath string) error {
 	cmd.Dir = repoPath
 
 	if output, err := cmd.CombinedOutput(); err != nil {
+		// Check if this is the first push that needs upstream setup
+		if strings.Contains(string(output), "no upstream branch") {
+			// Get current branch and set upstream
+			branch, branchErr := GetCurrentBranch(repoPath)
+			if branchErr != nil {
+				return fmt.Errorf("failed to push to remote: %s, %w", string(output), err)
+			}
+
+			// Push with set-upstream
+			upstreamCmd := exec.Command("git", "push", "--set-upstream", "origin", branch)
+			upstreamCmd.Dir = repoPath
+
+			if upstreamOutput, upstreamErr := upstreamCmd.CombinedOutput(); upstreamErr != nil {
+				return fmt.Errorf("failed to push to remote: %s, %w", string(upstreamOutput), upstreamErr)
+			}
+
+			return nil
+		}
 		return fmt.Errorf("failed to push to remote: %s, %w", string(output), err)
 	}
 
 	return nil
+}
+
+// GetCurrentBranch returns the current branch name
+func GetCurrentBranch(repoPath string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = repoPath
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+
+	branch := string(output)
+	if len(branch) > 0 && branch[len(branch)-1] == '\n' {
+		branch = branch[:len(branch)-1] // Remove trailing newline
+	}
+
+	return branch, nil
+}
+
+// GetRemoteURL returns the remote origin URL
+func GetRemoteURL(repoPath string) (string, error) {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = repoPath
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("no remote origin configured")
+	}
+
+	remoteURL := string(output)
+	if len(remoteURL) > 0 && remoteURL[len(remoteURL)-1] == '\n' {
+		remoteURL = remoteURL[:len(remoteURL)-1] // Remove trailing newline
+	}
+
+	return remoteURL, nil
+}
+
+// GetCommitCount returns the number of commits in the repository
+func GetCommitCount(repoPath string) (string, error) {
+	cmd := exec.Command("git", "rev-list", "--count", "HEAD")
+	cmd.Dir = repoPath
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "0", nil // No commits yet
+	}
+
+	count := string(output)
+	if len(count) > 0 && count[len(count)-1] == '\n' {
+		count = count[:len(count)-1] // Remove trailing newline
+	}
+
+	return count, nil
 }
 
 // EnsureRepo ensures a git repository exists and is properly initialized
