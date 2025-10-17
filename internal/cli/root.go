@@ -49,6 +49,7 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(removeCmd)
 	rootCmd.AddCommand(deployCmd)
+	rootCmd.AddCommand(syncCmd)
 
 	// Add flags
 	addCmd.Flags().BoolP("force", "f", false, "Force operation even if conflicts exist")
@@ -56,7 +57,6 @@ func init() {
 	addCmd.Flags().BoolP("backup", "b", false, "Create backup before operation")
 
 	deployCmd.Flags().BoolP("force", "f", false, "Force deployment even if conflicts exist")
-	deployCmd.Flags().BoolP("dry-run", "n", false, "Show what would happen without doing it")
+	deployCmd.Flags().BoolP("dry-run", "n", false, "Show what would be done without doing it")
 	deployCmd.Flags().BoolP("backup", "b", false, "Create backup before operation")
-	deployCmd.Flags().BoolP("sync", "s", false, "Auto-discover and add unmanaged files before deploying")
 }

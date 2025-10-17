@@ -15,28 +15,15 @@ var deployCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "Deploy managed files",
 	Long: `Deploy creates symlinks for all managed files.
-Useful when setting up dotfiles on a new system.
-
-With --sync flag, also discovers and adds any unmanaged files
-in the repo before deploying.`,
+Useful when setting up dotfiles on a new system.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		sync, _ := cmd.Flags().GetBool("sync")
-		return runDeploy(sync)
+		return runDeploy()
 	},
 }
 
-func runDeploy(withSync bool) error {
+func runDeploy() error {
 	if !config.DotmanDirExists(cfg) {
 		return fmt.Errorf("dotman directory does not exist: %s", cfg.DotmanDir)
-	}
-
-	// If sync flag is set, run sync first
-	if withSync {
-		fmt.Println("Auto-discovering unmanaged files...")
-		if err := runSync(false, true); err != nil {
-			fmt.Printf("Warning: sync failed: %v\n", err)
-			fmt.Println("Continuing with normal deployment...")
-		}
 	}
 
 	idx, err := index.Load(cfg.IndexFile)

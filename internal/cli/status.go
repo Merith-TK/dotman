@@ -20,27 +20,24 @@ var statusCmd = &cobra.Command{
 	Short: "Show status of managed files",
 	Long: `Show information about all files currently managed by dotman.
 	
-With --sync flag, also discovers and adds any unmanaged files in the repo.
 With --fix flag, repairs broken or missing symlinks.
 With --cleanup flag, removes redundant individual file entries that are covered by managed directories.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		sync, _ := cmd.Flags().GetBool("sync")
 		fix, _ := cmd.Flags().GetBool("fix")
 		cleanup, _ := cmd.Flags().GetBool("cleanup")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
-		return runStatus(sync, fix, cleanup, dryRun)
+		return runStatus(fix, cleanup, dryRun)
 	},
 }
 
 func init() {
-	statusCmd.Flags().BoolP("sync", "s", false, "Auto-discover and add unmanaged files")
 	statusCmd.Flags().BoolP("fix", "f", false, "Fix broken or missing symlinks")
 	statusCmd.Flags().BoolP("cleanup", "c", false, "Remove redundant file entries covered by managed directories")
 	statusCmd.Flags().BoolP("dry-run", "n", false, "Show what would be done without doing it")
 }
 
-func runStatus(sync bool, fix bool, cleanup bool, dryRun bool) error {
+func runStatus(fix bool, cleanup bool, dryRun bool) error {
 	if !config.DotmanDirExists(cfg) {
 		fmt.Println("Dotman not initialized. Use 'dotman add' to start managing files.")
 		return nil
@@ -51,15 +48,6 @@ func runStatus(sync bool, fix bool, cleanup bool, dryRun bool) error {
 		fmt.Println("Cleaning up redundant file entries...")
 		if err := runCleanup(dryRun); err != nil {
 			fmt.Printf("Warning: cleanup failed: %v\n", err)
-		}
-		fmt.Println()
-	}
-
-	// Run sync first if requested
-	if sync {
-		fmt.Println("Auto-discovering unmanaged files...")
-		if err := runSync(dryRun, true); err != nil {
-			fmt.Printf("Warning: sync failed: %v\n", err)
 		}
 		fmt.Println()
 	}
@@ -130,159 +118,6 @@ func runStatus(sync bool, fix bool, cleanup bool, dryRun bool) error {
 			}
 		}
 	}
-
-	return nil
-}
-
-// runSync scans the .dotman directory for unmanaged files and adds them to the index
-func runSync(dryRun bool, autoAdd bool) error {
-	if !config.DotmanDirExists(cfg) {
-		return fmt.Errorf("dotman directory does not exist: %s", cfg.DotmanDir)
-	}
-
-	// Load current index
-	idx, err := index.Load(cfg.IndexFile)
-	if err != nil {
-		return fmt.Errorf("failed to load index: %w", err)
-	}
-
-	// Find unmanaged files in the repo
-	unmanaged, err := findUnmanagedFiles(cfg.DotmanDir, idx)
-	if err != nil {
-		return fmt.Errorf("failed to scan repo: %w", err)
-	}
-
-	if len(unmanaged) == 0 {
-		fmt.Println("All repo files are already managed in the index.")
-		return nil
-	}
-
-	fmt.Printf("Found %d unmanaged file(s) in repo:\n", len(unmanaged))
-	for _, file := range unmanaged {
-		fmt.Printf("  %s\n", file)
-	}
-
-	if dryRun {
-		fmt.Println("\nDry-run mode: would add these files to the index")
-		return nil
-	}
-
-	if !autoAdd {
-		fmt.Print("\nAdd these files to the index? (y/N): ")
-		var response string
-		fmt.Scanln(&response)
-		if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
-			fmt.Println("Sync cancelled.")
-			return nil
-		}
-	}
-
-	// Add unmanaged files to the index
-	added := 0
-	var addedPaths []string
-	for _, repoPath := range unmanaged {
-		if err := addUnmanagedFile(idx, repoPath); err != nil {
-			fmt.Printf("Warning: failed to add %s: %v\n", repoPath, err)
-			continue
-		}
-		added++
-		addedPaths = append(addedPaths, "$HOME/"+repoPath)
-		if !autoAdd {
-			fmt.Printf("Added %s to index\n", repoPath)
-		}
-	}
-
-	if added == 0 {
-		fmt.Println("No files were added to the index.")
-		return nil
-	}
-
-	// Save updated index
-	if err := index.Save(idx, cfg.IndexFile); err != nil {
-		return fmt.Errorf("failed to save index: %w", err)
-	}
-
-	// Commit the changes
-	if err := git.Add(cfg.DotmanDir); err != nil {
-		return fmt.Errorf("failed to stage changes: %w", err)
-	}
-
-	// Create commit message with actual paths
-	var commitMsg string
-	if len(addedPaths) == 1 {
-		commitMsg = fmt.Sprintf("Sync: add %s to index", addedPaths[0])
-	} else if len(addedPaths) <= 3 {
-		commitMsg = fmt.Sprintf("Sync: add %s to index", strings.Join(addedPaths, ", "))
-	} else {
-		commitMsg = fmt.Sprintf("Sync: add %d files to index (%s, ...)", len(addedPaths), strings.Join(addedPaths[:2], ", "))
-	}
-
-	if err := git.Commit(cfg.DotmanDir, commitMsg); err != nil {
-		return fmt.Errorf("failed to commit changes: %w", err)
-	}
-
-	if autoAdd {
-		fmt.Printf("Auto-synced %d file(s)\n", added)
-	} else {
-		fmt.Printf("Successfully synced %d file(s)\n", added)
-	}
-
-	return nil
-}
-
-// findUnmanagedFiles scans the repo directory and returns files not in the index
-func findUnmanagedFiles(repoDir string, idx *types.Index) ([]string, error) {
-	var unmanaged []string
-
-	err := filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Skip .git directory and index.json
-		if strings.Contains(path, ".git") || strings.HasSuffix(path, "index.json") {
-			if info.IsDir() && strings.HasSuffix(path, ".git") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		// Skip directories - we only track files
-		if info.IsDir() {
-			return nil
-		}
-
-		// Get relative path from repo root
-		relPath, err := filepath.Rel(repoDir, path)
-		if err != nil {
-			return err
-		}
-
-		// Check if this file is already managed in the index
-		originalPath := filepath.Join(cfg.HomeDir, relPath)
-		if !index.IsManaged(idx, originalPath) {
-			unmanaged = append(unmanaged, relPath)
-		}
-
-		return nil
-	})
-
-	return unmanaged, err
-}
-
-// addUnmanagedFile adds a single unmanaged file to the index
-func addUnmanagedFile(idx *types.Index, repoPath string) error {
-	// Calculate the original path (where the symlink should be)
-	originalPath := filepath.Join(cfg.HomeDir, repoPath)
-
-	// Get the full repository path
-	fullRepoPath := filepath.Join(cfg.DotmanDir, repoPath)
-
-	// Get file type
-	fileType := fileops.GetFileType(fullRepoPath)
-
-	// Add to index
-	index.AddFile(idx, originalPath, repoPath, fileType)
 
 	return nil
 }

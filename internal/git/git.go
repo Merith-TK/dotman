@@ -11,11 +11,11 @@ import (
 func InitRepo(repoPath string) error {
 	cmd := exec.Command("git", "init")
 	cmd.Dir = repoPath
-	
+
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to initialize git repo: %s, %w", string(output), err)
 	}
-	
+
 	return nil
 }
 
@@ -32,15 +32,15 @@ func Add(repoPath string, files ...string) error {
 		// Add all files
 		files = []string{"."}
 	}
-	
+
 	args := append([]string{"add"}, files...)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repoPath
-	
+
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to add files to git: %s, %w", string(output), err)
 	}
-	
+
 	return nil
 }
 
@@ -48,7 +48,7 @@ func Add(repoPath string, files ...string) error {
 func Commit(repoPath, message string) error {
 	cmd := exec.Command("git", "commit", "-m", message)
 	cmd.Dir = repoPath
-	
+
 	if output, err := cmd.CombinedOutput(); err != nil {
 		// Check if the error is because there's nothing to commit
 		if cmd.ProcessState.ExitCode() == 1 {
@@ -57,7 +57,7 @@ func Commit(repoPath, message string) error {
 		}
 		return fmt.Errorf("failed to commit: %s, %w", string(output), err)
 	}
-	
+
 	return nil
 }
 
@@ -65,12 +65,12 @@ func Commit(repoPath, message string) error {
 func Status(repoPath string) (string, error) {
 	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = repoPath
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get git status: %w", err)
 	}
-	
+
 	return string(output), nil
 }
 
@@ -80,7 +80,7 @@ func HasChanges(repoPath string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	
+
 	return len(status) > 0, nil
 }
 
@@ -97,12 +97,36 @@ Thumbs.db
 # Don't ignore the index file
 !index.json
 `
-	
+
 	gitignorePath := filepath.Join(repoPath, ".gitignore")
 	if err := os.WriteFile(gitignorePath, []byte(gitignoreContent), 0644); err != nil {
 		return fmt.Errorf("failed to create .gitignore: %w", err)
 	}
-	
+
+	return nil
+}
+
+// Pull pulls changes from the remote repository
+func Pull(repoPath string) error {
+	cmd := exec.Command("git", "pull")
+	cmd.Dir = repoPath
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to pull from remote: %s, %w", string(output), err)
+	}
+
+	return nil
+}
+
+// Push pushes changes to the remote repository
+func Push(repoPath string) error {
+	cmd := exec.Command("git", "push")
+	cmd.Dir = repoPath
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to push to remote: %s, %w", string(output), err)
+	}
+
 	return nil
 }
 
@@ -112,21 +136,21 @@ func EnsureRepo(repoPath string) error {
 		if err := InitRepo(repoPath); err != nil {
 			return err
 		}
-		
+
 		// Create initial .gitignore
 		if err := CreateGitignore(repoPath); err != nil {
 			return err
 		}
-		
+
 		// Make initial commit
 		if err := Add(repoPath); err != nil {
 			return err
 		}
-		
+
 		if err := Commit(repoPath, "Initial dotman repository"); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
