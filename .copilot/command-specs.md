@@ -2,11 +2,11 @@
 
 ## Command Overview
 
-Dotman is a HOME-directory-only dotfiles manager that uses symlinks to maintain files in their original locations while storing the actual files in a centralized git repository.
+Dotman is a production-ready, HOME-directory-only dotfiles manager that uses symlinks to maintain files in their original locations while storing the actual files in a centralized git repository with intelligent directory hierarchy management.
 
 ## Security Model
 
-**HOME Directory Only**: All operations are restricted to files within the user's home directory (`$HOME`). Files outside of `$HOME` cannot be managed by dotman for security reasons.
+**HOME Directory Only**: All operations are strictly restricted to files within the user's home directory (`$HOME`). Files outside of `$HOME` cannot be managed by dotman for security reasons. This restriction is enforced at all entry points with comprehensive path validation.
 
 ## Commands
 
@@ -52,18 +52,24 @@ dotman clone https://github.com/user/dotfiles.git
 # Output: Cloned dotfiles repository to ~/.dotman
 ```
 
-### `dotman add <path>`
+### `dotman add <path>...`
 
-**Purpose**: Add a file or directory to dotman management
+**Purpose**: Add one or more files or directories to dotman management
 
 **Flow**:
-1. Validate `<path>` is within `$HOME`
-2. Expand path to absolute path
-3. Check if already managed (error if so)
-4. Move file: `mv <path> ~/.dotman/<relative-path>`
-5. Create symlink: `ln -s ~/.dotman/<relative-path> <path>`
-6. Update `index.json`
-7. Git add and commit
+1. Process each path independently with error resilience
+2. Validate each `<path>` is within `$HOME`
+3. Expand path to absolute path
+4. Check if already managed (error if so)
+5. Move file: `mv <path> ~/.dotman/<relative-path>`
+6. Create symlink: `ln -s ~/.dotman/<relative-path> <path>`
+7. Update `index.json`
+8. Git add and commit with `$HOME/` relative path
+
+**Multi-File Behavior**:
+- Continues processing remaining files if some fail
+- Reports success/failure counts at completion
+- Individual error messages for each failure
 
 **Error Conditions**:
 - Path is outside `$HOME`
@@ -71,49 +77,71 @@ dotman clone https://github.com/user/dotfiles.git
 - Path is already managed
 - Path is a broken symlink
 
-**Example**:
+**Examples**:
 ```bash
 dotman add ~/.config/sway
 # Output: Successfully added ~/.config/sway to dotman management
+# Commit: Add $HOME/.config/sway to dotman management
 
-dotman add /etc/hosts
-# Error: path must be inside home directory: /etc/hosts
+dotman add ~/.bashrc ~/.bash_aliases ~/.config/nvim
+# Output: Successfully added 3 files to dotman management
+
+dotman add /etc/hosts ~/.bashrc
+# Output: 
+# Completed with 1 successes and 1 failures:
+#   Error: /etc/hosts: path must be inside home directory: /etc/hosts
 ```
 
-### `dotman remove <path>`
+### `dotman remove <path>...`
 
-**Purpose**: Remove a file or directory from dotman management
+**Purpose**: Remove one or more files or directories from dotman management
 
 **Flow**:
-1. Validate `<path>` is within `$HOME`
-2. Expand path to absolute path
-3. Check if managed (error if not)
-4. Remove symlink: `rm <path>`
-5. Restore original: `mv ~/.dotman/<relative-path> <path>`
-6. Update `index.json`
-7. Git add and commit
+1. Process each path independently with error resilience
+2. Validate each `<path>` is within `$HOME`
+3. Expand path to absolute path
+4. Check if managed (error if not)
+5. Remove symlink: `rm <path>`
+6. Restore original: `mv ~/.dotman/<relative-path> <path>`
+7. Update `index.json`
+8. Git add and commit with `$HOME/` relative path
+
+**Multi-File Behavior**:
+- Continues processing remaining files if some fail
+- Reports success/failure counts at completion
+- Individual error messages for each failure
 
 **Error Conditions**:
 - Path is outside `$HOME`
 - Path is not managed by dotman
 - Original file missing from repository
 
-**Example**:
+**Examples**:
 ```bash
 dotman remove ~/.config/sway
 # Output: Successfully removed ~/.config/sway from dotman management
+# Commit: Remove $HOME/.config/sway from dotman management
+
+dotman remove ~/.config/nvim ~/.old-config ~/.bashrc
+# Output: 
+# Completed with 2 successes and 1 failures:
+#   Error: ~/.old-config: path is not managed by dotman
 
 dotman remove ~/.unmanaged-file
 # Error: path is not managed by dotman: ~/.unmanaged-file
 ```
 
-### `dotman deploy`
+### `dotman deploy [flags]`
 
 **Purpose**: Deploy all managed files from the repository
 
+**Flags**:
+- `--sync, -s`: Auto-discover and add unmanaged files before deploying
+
 **Flow**:
-1. Read `index.json`
-2. For each managed file:
+1. If `--sync` flag set, run sync operation first
+2. Read `index.json`
+3. For each managed file:
    - Check if repository file exists
    - Check if target location exists
    - If target is symlink, skip
@@ -125,7 +153,7 @@ dotman remove ~/.unmanaged-file
 - Repository files missing
 - Permission errors
 
-**Example**:
+**Examples**:
 ```bash
 dotman deploy
 # Output: 
@@ -133,6 +161,20 @@ dotman deploy
 # Deployed ~/.bashrc
 # Deployed ~/.config/sway
 # Skipping ~/.vimrc (symlink already exists)
+# Deployment complete.
+
+dotman deploy --sync
+# Output:
+# Auto-discovering unmanaged files...
+# Found 5 unmanaged file(s) in repo:
+#   .gitconfig
+#   .config/waybar/config
+# Auto-synced 5 file(s)
+#
+# Deploying 8 file(s)...
+# Deployed ~/.gitconfig
+# Deployed ~/.config/waybar
+# [... more files]
 # Deployment complete.
 ```
 
@@ -174,15 +216,24 @@ dotman fix ~/.bashrc
 # Output: ✓ ~/.bashrc is already correctly linked
 ```
 
-### `dotman status`
+### `dotman status [flags]`
 
-**Purpose**: Show status of all managed files
+**Purpose**: Show status of managed files with advanced maintenance options
+
+**Smart Filtering**: Only shows top-level managed items. Files within managed directories are automatically covered and not displayed separately.
+
+**Flags**:
+- `--sync, -s`: Auto-discover and add unmanaged files from repository
+- `--fix, -f`: Fix broken or missing symlinks
+- `--cleanup, -c`: Remove redundant file entries covered by managed directories  
+- `--dry-run, -n`: Preview changes without applying them
 
 **Output**:
-- List of managed files with status indicators
+- List of top-level managed files/directories with status indicators
 - Git repository status (if uncommitted changes)
+- Operation results for flags
 
-**Example**:
+**Examples**:
 ```bash
 dotman status
 # Output:
@@ -191,6 +242,31 @@ dotman status
 # ✓ ~/.bashrc (file) - OK
 # ✓ ~/.config/sway (directory) - OK
 # ✗ ~/.vimrc (file) - Missing
+
+dotman status --cleanup
+# Output:
+# Cleaning up redundant file entries...
+# Found 15 redundant file entries covered by managed directories:
+#   ~/.config/sway/config (covered by parent directory)
+#   ~/.config/sway/scripts/power_menu.sh (covered by parent directory)
+#   [... more files]
+# Removed 15 redundant entries from index
+# Successfully cleaned up 15 redundant file entries
+
+dotman status --sync --dry-run
+# Output:
+# Auto-discovering unmanaged files...
+# Found 5 unmanaged file(s) in repo:
+#   .config/waybar/config
+#   .gitconfig
+# Dry-run mode: would add these files to the index
+
+dotman status --fix
+# Output:
+# Found 2 broken symlink(s). Fixing them...
+# 🔧 ~/.vimrc - Missing symlink - Fixed!
+# ⚠️  ~/.old-config - Exists but is not a symlink (manual intervention required)
+# Fixed 1 file(s)
 ```
 
 ## Path Handling Rules
